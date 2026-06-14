@@ -163,6 +163,10 @@ async def vote(ctx):
         await ctx.reply('You must be a resident or citizen to vote.', mention_author=True)
         return
 
+    if str(ctx.author.id) in election_state['voters']:
+        await ctx.reply('You have already voted!', mention_author=True)
+        return
+
     if not election_state['candidates']:
         await ctx.reply('There are no candidates in the current election.', mention_author=True)
         return
@@ -241,7 +245,7 @@ async def help_command(ctx):
         '**Election Bot Commands**\n'
         '`elect!createelection <name>, <vote_amount>` - Start a new election.\n'
         '`elect!addcandidate <candidate>` - Add a candidate to the active election.\n'
-        '`elect!vote` - Receive your private ballot in DMs. Requires the Citizen role.\n'
+        '`elect!vote` - Receive your private ballot in DMs. Requires you to be a resident or citizen.\n'
         '`elect!electionstatus` - Show the current election and vote counts.\n'
         '`elect!closeelection` - End the election and announce the winner(s).\n'
         '`elect!showcontext` - Print command context information.\n'
