@@ -17,8 +17,13 @@ election_state = {
     'voters': {}
 }
 
+approved_admin_ids = [708867559490846730]  # replace with real admin user IDs
+
 def citizen_role_check(member: discord.Member) -> bool:
     return any(role.name.lower() == 'citizen' or role.name.lower() == 'resident' for role in member.roles)
+
+def is_admin(member: discord.Member) -> bool:
+    return member.id in approved_admin_ids
 
 class VoteSelect(discord.ui.Select):
     def __init__(self, voter_id: int):
@@ -95,6 +100,10 @@ async def createelection(ctx, *, election_name: str):
         await ctx.send('Create elections from a server channel, not in DMs.')
         return
 
+    if not is_admin(ctx.author):
+        await ctx.reply('You do not have permission to manage elections.', mention_author=True)
+        return
+
     if election_state['active']:
         await ctx.send('There is already an active election. Close it before creating a new one.')
         return
@@ -130,6 +139,10 @@ async def createelection(ctx, *, election_name: str):
 async def addcandidate(ctx, *, candidate_name: str):
     if ctx.guild is None:
         await ctx.reply('Add candidates from a server channel, not in DMs.', mention_author=True)
+        return
+
+    if not is_admin(ctx.author):
+        await ctx.reply('You do not have permission to manage elections.', mention_author=True)
         return
 
     if not election_state['active']:
@@ -189,22 +202,44 @@ async def electionstatus(ctx):
         await ctx.reply('There is no active election right now.', mention_author=True)
         return
 
+    if not ctx.guild:
+        await ctx.reply('Election status must be requested from a server channel.', mention_author=True)
+        return
+
     if not election_state['candidates']:
         await ctx.reply('The election is active, but no candidates have been added yet.', mention_author=True)
         return
 
-    lines = [f"Election: **{election_state['name']}**"]
-    lines.append('Candidates and current vote counts:')
-    for candidate in election_state['candidates']:
-        lines.append(f"- **{candidate}**: {election_state['votes'].get(candidate, 0)} votes")
+    eligible_members = [member for member in ctx.guild.members if citizen_role_check(member)]
+    eligible_count = len(eligible_members)
+    total_votes = len(election_state['voters'])
+    turnout = (total_votes / eligible_count * 100) if eligible_count else 0.0
+    turnout_text = f"{turnout:.2f}%"
 
-    lines.append(f"Total voters: {len(election_state['voters'])}")
-    await ctx.reply('\n'.join(lines), mention_author=True)
+    if is_admin(ctx.author):
+        lines = [f"Election: **{election_state['name']}**"]
+        lines.append('Candidates and current vote counts:')
+        for candidate in election_state['candidates']:
+            lines.append(f"- **{candidate}**: {election_state['votes'].get(candidate, 0)} votes")
+        lines.append(f"Total votes cast: {total_votes}")
+        lines.append(f"Turnout: {turnout_text}")
+        await ctx.reply('\n'.join(lines), mention_author=True)
+    else:
+        await ctx.reply(
+            f"Election: **{election_state['name']}**\n"
+            f"Total votes cast: {total_votes}\n"
+            f"Turnout: {turnout_text}",
+            mention_author=True,
+        )
 
 @bot.command(name='closeelection')
 async def closeelection(ctx):
     if not election_state['active']:
         await ctx.reply('There is no active election to close.', mention_author=True)
+        return
+
+    if not is_admin(ctx.author):
+        await ctx.reply('You do not have permission to manage elections.', mention_author=True)
         return
 
     if not election_state['candidates']:
@@ -248,20 +283,8 @@ async def help_command(ctx):
         '`elect!vote` - Receive your private ballot in DMs. Requires you to be a resident or citizen.\n'
         '`elect!electionstatus` - Show the current election and vote counts.\n'
         '`elect!closeelection` - End the election and announce the winner(s).\n'
-        '`elect!showcontext` - Print command context information.\n'
         '`elect!help` - Show this help message.'
     )
     await ctx.reply(help_text, mention_author=True)
-
-@bot.command(name='showcontext')
-async def showcontext(ctx):
-    context_data = [
-        f'User: {ctx.author}',
-        f'User ID: {ctx.author.id}',
-        f'Guild: {ctx.guild.name if ctx.guild else 'DM'}',
-        f'Channel: {ctx.channel.name if hasattr(ctx.channel, "name") else ctx.channel}',
-        f'Command: {ctx.invoked_with}',
-    ]
-    await ctx.reply('Context:\n' + '\n'.join(context_data), mention_author=True)
 
 bot.run(BOT_TOKEN)
